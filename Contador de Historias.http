@@ -1,0 +1,6 @@
+@Contador_de_Historias_HostAddress = http://localhost:5108
+
+GET {{Contador_de_Historias_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

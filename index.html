@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terminal de Histórias - Multi-Sessão</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        :root {
+            /* Tema Padrão: Cyberpunk */
+            --cy-yellow: #FFD700;
+            --cy-cyan: #00F0FF;
+            --cy-red: #FF003C;
+            --bg-dark: #121212;
+            --bg-panel: #1e1e1e;
+            --font-main: 'Courier New', Courier, monospace;
+            --text-main: #e0e0e0;
+        }
+
+        [data-theme="arcane"] {
+            /* Tema Mágico: A Dualidade de Arcane */
+            --cy-yellow: #E2B846; /* Ouro Piltover / Latão Escovado */
+            --cy-cyan: #07F5EA; /* Azul Hextech Vibrante */
+            --cy-red: #A13D2D; /* Cobre Enferrujado de Zaun */
+            --bg-dark: #05080A; /* Breu esverdeado das profundezas */
+            --bg-panel: rgba(16, 28, 43, 0.65); /* Painel translúcido em Azul Defensor */
+            --font-main: 'Georgia', serif;
+            --text-main: #EFEFEF; /* Mármore / Branco Levemente Sujo */
+        }
+
+        /* Gradiente Dual City Ultra-Fiel (Céu de Piltover x Esgoto de Zaun) */
+        body[data-theme="arcane"] {
+            background-color: var(--bg-dark) !important;
+            background-image: 
+                /* 1. AMEAÇA DA CINTILA: Fumaça violenta roxa brotando dos cantos inferiores */
+                radial-gradient(circle at 10% 110%, rgba(179, 0, 255, 0.35) 0%, transparent 45%),
+                radial-gradient(circle at 90% 105%, rgba(179, 0, 255, 0.25) 0%, transparent 40%),
+                
+                /* 2. QUIMIOTECNOLOGIA: Brilho verde tóxico no fundo do poço */
+                radial-gradient(ellipse at 50% 105%, rgba(50, 222, 132, 0.15) 0%, transparent 45%),
+                
+                /* 3. A FENDA (Transição): Névoa densa subindo e cortando a luz */
+                linear-gradient(0deg, rgba(11, 22, 19, 0.85) 0%, rgba(16, 28, 43, 0.2) 50%, transparent 100%),
+                
+                /* 4. RIQUEZA DE PILTOVER: Reflexos de ouro da arquitetura nos cantos superiores */
+                radial-gradient(ellipse at 85% -10%, rgba(226, 184, 70, 0.18) 0%, transparent 45%),
+                radial-gradient(ellipse at 15% -20%, rgba(226, 184, 70, 0.12) 0%, transparent 40%),
+                
+                /* 5. NÚCLEO HEXTECH: A magia azul rasgando o topo da tela */
+                radial-gradient(circle at 50% -15%, rgba(7, 245, 234, 0.25) 0%, transparent 55%),
+                
+                /* 6. BASE DO MUNDO: O céu limpo de Piltover decaindo para o escuro de Zaun */
+                linear-gradient(180deg, #101C2B 0%, #0A121A 30%, #05080A 80%, #020304 100%) !important;
+            
+            background-attachment: fixed;
+        }
+
+        /* Integração dos Painéis com a Arte */
+        body[data-theme="arcane"] .sidebar, 
+        body[data-theme="arcane"] .chat-header, 
+        body[data-theme="arcane"] .chat-input-area {
+            background-color: rgba(8, 14, 20, 0.75) !important;
+            border-color: var(--cy-yellow);
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.8); /* Sombra dura para separar a UI do cenário */
+            backdrop-filter: blur(4px); /* Traz o efeito de vidro embaçado pela fumaça */
+        }
+        
+        /* Acabamentos Especiais: Inputs e Botões Hextech */
+        body[data-theme="arcane"] .chat-input-area input {
+            background-color: rgba(226, 184, 70, 0.03);
+            border: 1px solid rgba(226, 184, 70, 0.4);
+            color: var(--cy-yellow);
+        }
+        
+        body[data-theme="arcane"] .chat-input-area input:focus {
+            box-shadow: inset 0 0 12px rgba(7, 245, 234, 0.15); /* Acende em azul ao digitar */
+            border-color: var(--cy-cyan);
+            color: var(--cy-cyan);
+        }
+        
+        body[data-theme="arcane"] .chat-input-area button {
+            background-color: var(--cy-yellow);
+            color: #101C2B;
+            border-radius: 2px;
+        }
+        
+        body[data-theme="arcane"] .chat-input-area button:hover:not(:disabled) { 
+            background-color: var(--cy-cyan); /* O botão ativa o Hextech ao passar o mouse */
+            color: #000;
+            box-shadow: 0 0 15px var(--cy-cyan); 
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: var(--font-main);
+        }
+
+        body, .sidebar, .chat-container, .chat-header, .chat-input-area, .sidebar-header, .message {
+            transition: background-color 0.5s ease, border-color 0.5s ease, color 0.5s ease;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* ================= MENU LATERAL (SIDEBAR) ================= */
+        .sidebar {
+            width: 320px;
+            background-color: #000;
+            border-right: 2px solid var(--cy-yellow);
+            display: flex;
+            flex-direction: column;
+            z-index: 10;
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            background-color: var(--cy-yellow);
+            color: #000;
+            text-align: center;
+            font-weight: bold;
+            text-transform: uppercase;
+            border-bottom: 2px solid var(--cy-red);
+        }
+
+        .session-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            list-style: none;
+        }
+
+        /* Scrollbar do Menu Lateral */
+        .session-list::-webkit-scrollbar { width: 5px; }
+        .session-list::-webkit-scrollbar-thumb { background: var(--cy-cyan); }
+
+        .session-item {
+            background: rgba(0, 240, 255, 0.05);
+            border: 1px solid var(--cy-cyan);
+            margin-bottom: 10px;
+            padding: 15px;
+            cursor: pointer;
+            clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+            transition: 0.2s;
+        }
+
+        .session-item:hover, .session-item.active {
+            background: rgba(0, 240, 255, 0.2);
+            border-color: var(--cy-yellow);
+            box-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+        }
+
+        .session-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+
+        .session-title {
+            color: var(--cy-yellow);
+            font-weight: bold;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+        }
+
+        .btn-delete-sessao {
+            background: transparent; color: var(--cy-red); border: none; cursor: pointer;
+            font-size: 1rem; padding: 2px 5px; border-radius: 3px; transition: 0.2s;
+        }
+        .btn-delete-sessao:hover { background: rgba(255,0,60,0.3); color: #fff; }
+
+        .session-char {
+            color: var(--cy-cyan);
+            font-size: 0.8rem;
+        }
+
+        /* ================= ÁREA DO CHAT PRINCIPAL ================= */
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--bg-panel);
+            position: relative;
+        }
+
+        .chat-header {
+            background-color: #000;
+            padding: 20px;
+            text-align: center;
+            border-bottom: 2px solid var(--cy-cyan);
+            text-transform: uppercase;
+            min-height: 85px;
+        }
+        
+        .chat-header h1 { font-size: 1.5rem; color: var(--cy-yellow); text-shadow: 2px 2px 0px var(--cy-red); }
+        .chat-header p { font-size: 0.9rem; color: var(--cy-cyan); margin-top: 5px; font-weight: bold; }
+
+        .chat-history {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .chat-history::-webkit-scrollbar { width: 8px; }
+        .chat-history::-webkit-scrollbar-track { background: #000; }
+        .chat-history::-webkit-scrollbar-thumb { background: var(--cy-yellow); }
+
+        .message {
+            max-width: 85%;
+            padding: 15px 20px;
+            line-height: 1.5;
+            clip-path: polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px);
+            border: 1px solid;
+            position: relative; /* Necessário para o botão rebobinar */
+        }
+
+        .rewind-btn {
+            position: absolute;
+            top: 5px;
+            right: 25px;
+            background: rgba(255, 0, 60, 0.2);
+            color: var(--cy-red);
+            border: 1px solid var(--cy-red);
+            padding: 3px 8px;
+            font-size: 0.7rem;
+            cursor: pointer;
+            opacity: 0;
+            transition: 0.3s;
+            text-transform: uppercase;
+            font-weight: bold;
+            z-index: 5;
+        }
+
+        .message:hover .rewind-btn {
+            opacity: 1;
+        }
+
+        .rewind-btn:hover {
+            background: var(--cy-red);
+            color: #000;
+            box-shadow: 0 0 10px var(--cy-red);
+        }
+
+        .message.ia { align-self: flex-start; border-color: var(--cy-cyan); background: rgba(0, 240, 255, 0.05); }
+        .message.user { align-self: flex-end; border-color: var(--cy-red); background: rgba(255, 0, 60, 0.05); }
+        .message.system { align-self: center; border-color: var(--cy-yellow); color: var(--cy-yellow); text-align: center; clip-path: none; border-radius: 5px; }
+
+        .message-role {
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .ia .message-role { color: var(--cy-cyan); }
+        .user .message-role { color: var(--cy-red); text-align: right; }
+
+        /* Estilização do Markdown */
+        .message p { margin-bottom: 10px; }
+        .message p:last-child { margin-bottom: 0; display: inline; }
+        .message strong { color: var(--cy-yellow); text-shadow: 0 0 5px var(--cy-yellow); font-weight: bold; }
+        .message em { color: var(--cy-cyan); font-style: italic; }
+        .message ul { margin-left: 20px; margin-bottom: 10px; }
+        .message li { margin-bottom: 5px; }
+
+        /* ================= EFEITO CRT (MONITOR DE TUBO) APENAS CYBERPUNK ================= */
+        body:not([data-theme="arcane"])::after {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%);
+            background-size: 100% 4px;
+            z-index: 100;
+            pointer-events: none; /* Para não bloquear os cliques na tela */
+        }
+
+        body:not([data-theme="arcane"]) {
+            text-shadow: 0 0 3px rgba(0, 240, 255, 0.3); /* Brilho de fósforo no texto */
+        }
+
+        body:not([data-theme="arcane"]) .chat-container {
+            box-shadow: inset 0 0 100px rgba(0,0,0,0.8); /* Sombra interna imitando a curvatura da tela */
+        }
+
+        .chat-input-area {
+            display: flex;
+            padding: 20px;
+            background-color: #000;
+            border-top: 2px solid var(--cy-yellow);
+        }
+
+        .chat-input-area input {
+            flex: 1;
+            padding: 15px;
+            background-color: rgba(255, 215, 0, 0.05);
+            border: 1px solid var(--cy-yellow);
+            color: var(--cy-yellow);
+            font-size: 1rem;
+            outline: none;
+            transition: 0.3s;
+        }
+        
+        .chat-input-area input:disabled { opacity: 0.3; cursor: not-allowed; }
+
+        .chat-input-area button {
+            margin-left: 10px;
+            padding: 0 25px;
+            background-color: var(--cy-yellow);
+            color: #000;
+            border: none;
+            font-weight: bold;
+            font-size: 1rem;
+            cursor: pointer;
+            text-transform: uppercase;
+        }
+        
+        .chat-input-area button:disabled { opacity: 0.3; cursor: not-allowed; }
+        .chat-input-area button:hover:not(:disabled) { background-color: #fff; box-shadow: 0 0 10px var(--cy-yellow); }
+
+        .cursor { display: inline-block; width: 8px; height: 15px; background-color: var(--cy-cyan); animation: blink 1s step-end infinite; vertical-align: bottom; margin-left: 2px; }
+        @keyframes blink { 50% { opacity: 0; } }
+
+        /* ================= MODAL NOVA SESSÃO ================= */
+        .btn-nova-sessao {
+            margin: 10px; padding: 12px; background-color: var(--cy-yellow); color: #000;
+            border: none; font-weight: bold; text-transform: uppercase; cursor: pointer; transition: 0.3s;
+        }
+        .btn-nova-sessao:hover { background-color: var(--cy-cyan); box-shadow: 0 0 10px var(--cy-cyan); }
+
+        .modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); z-index: 1000; justify-content: center; align-items: center;
+            backdrop-filter: blur(5px);
+        }
+        .modal-content {
+            background: var(--bg-panel); border: 2px solid var(--cy-yellow); padding: 25px;
+            width: 450px; display: flex; flex-direction: column; gap: 15px;
+            box-shadow: 0 0 30px rgba(0,0,0,0.9);
+        }
+        .modal-content h2 { color: var(--cy-yellow); text-align: center; text-transform: uppercase; }
+        .modal-content input, .modal-content textarea {
+            padding: 12px; background: rgba(0,0,0,0.5); border: 1px solid var(--cy-yellow);
+            color: var(--cy-yellow); font-family: var(--font-main); outline: none;
+        }
+        .modal-content input:focus, .modal-content textarea:focus { border-color: var(--cy-cyan); box-shadow: inset 0 0 10px rgba(0,240,255,0.2); }
+        .modal-content textarea { resize: vertical; min-height: 120px; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
+        .modal-actions button { padding: 10px 20px; border: none; cursor: pointer; font-weight: bold; text-transform: uppercase; transition: 0.2s;}
+        #btn-cancelar-sessao { background: transparent; color: var(--cy-red); border: 1px solid var(--cy-red); }
+        #btn-cancelar-sessao:hover { background: rgba(255,0,60,0.2); }
+        #btn-salvar-sessao { background: var(--cy-cyan); color: #000; }
+        #btn-salvar-sessao:hover { box-shadow: 0 0 15px var(--cy-cyan); background: #fff; }
+
+        /* Mundos Pré-Prontos */
+        .world-selector-label { color: var(--cy-cyan); font-weight: bold; margin-bottom: -10px; font-size: 0.9rem; text-transform: uppercase; }
+        .world-selector { display: flex; gap: 8px; margin-bottom: 5px; }
+        .world-btn {
+            flex: 1; padding: 10px 5px; background: rgba(0,0,0,0.5); border: 1px solid var(--cy-yellow);
+            color: var(--cy-yellow); cursor: pointer; transition: 0.3s; font-size: 0.75rem; font-weight: bold;
+            text-transform: uppercase; text-align: center;
+        }
+        .world-btn:hover { background: rgba(0,240,255,0.2); border-color: var(--cy-cyan); }
+        .world-btn.active { background: var(--cy-cyan); color: #000; border-color: var(--cy-cyan); box-shadow: 0 0 10px var(--cy-cyan); }
+    </style>
+</head>
+<body>
+
+    <!-- MENU LATERAL -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            Sistemas Conectados
+        </div>
+        <button id="btn-nova-sessao" class="btn-nova-sessao">+ Nova História</button>
+        <ul class="session-list" id="session-list">
+            <!-- As sessões virão do C# e entrarão aqui -->
+        </ul>
+    </aside>
+
+    <!-- CHAT PRINCIPAL -->
+    <main class="chat-container">
+        <div class="chat-header">
+            <h1 id="header-title">AGUARDANDO CONEXÃO...</h1>
+            <p id="header-desc">Selecione uma sessão no menu lateral para iniciar.</p>
+        </div>
+
+        <div class="chat-history" id="chat-history">
+            <div class="message system">Conexão neural não estabelecida. Por favor, escolha um alvo.</div>
+        </div>
+
+        <div class="chat-input-area">
+            <!-- Começa bloqueado até selecionar uma sessão -->
+            <input type="text" id="user-input" placeholder="O QUE VOCÊ FAZ AGORA?..." autocomplete="off" disabled>
+            <button id="send-btn" disabled>Transmitir</button>
+        </div>
+    </main>
+
+    <!-- MODAL NOVA SESSÃO -->
+    <div id="modal-nova-sessao" class="modal">
+        <div class="modal-content" style="width: 600px;">
+            <h2>Iniciar Nova História</h2>
+            
+            <label class="world-selector-label">1. Escolha o Mundo (Lore Base)</label>
+            <div class="world-selector" id="world-selector">
+                <button class="world-btn" data-world="arcane">Arcane</button>
+                <button class="world-btn active" data-world="cyberpunk">Cyberpunk</button>
+                <button class="world-btn" data-world="overwatch">Overwatch</button>
+                <button class="world-btn" data-world="valorant">Valorant</button>
+                <button class="world-btn" data-world="custom">Outro</button>
+            </div>
+
+            <label class="world-selector-label" style="margin-top: 5px;">2. Quem é você?</label>
+            <input type="text" id="input-personagem" placeholder="Nome, Aparência e Status (Ex: Jinx, Cabelo azul, Louca com armas...)">
+            
+            <label class="world-selector-label" style="margin-top: 5px;">3. Regras do Mundo e Reações</label>
+            <textarea id="input-cenario" placeholder="Descreva o cenário, as regras do mundo e como os NPCs devem reagir a você..."></textarea>
+            
+            <div class="modal-actions">
+                <button id="btn-cancelar-sessao">Cancelar</button>
+                <button id="btn-salvar-sessao">Conectar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:5108/api/chat';
+        let sessaoAtual = null; // Guarda o ID da sessão que estamos jogando agora
+
+        const sessionList = document.getElementById('session-list');
+        const chatHistory = document.getElementById('chat-history');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        const headerTitle = document.getElementById('header-title');
+        const headerDesc = document.getElementById('header-desc');
+
+        // ====== AUDIO SYSTEM ======
+        let audioCtx;
+        function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+        function playTypingSound() {
+            if (!audioCtx) return;
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(100 + Math.random() * 50, audioCtx.currentTime);
+            gainNode.gain.setValueAtTime(0.015, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.04);
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.04);
+        }
+
+        function rolarParaOFinal() { chatHistory.scrollTop = chatHistory.scrollHeight; }
+
+        // 1. CARREGAR AS SESSÕES QUANDO ABRIR A TELA
+        async function carregarSessoes() {
+            try {
+                const res = await fetch(`${API_BASE_URL}/sessoes`);
+                const sessoes = await res.json();
+                
+                sessionList.innerHTML = '';
+                sessoes.forEach(s => {
+                    // O C# devolve o JSON geralmente em camelCase ou exatamente como no banco. 
+                    const id = s.id_Sessao || s.ID_Sessao || s.iD_Sessao;
+                    const personagem = s.nome_Personagem || s.Nome_Personagem;
+                    const contexto = s.cenario_Contexto || s.Cenario_Contexto || "";
+
+                    const li = document.createElement('li');
+                    li.className = 'session-item';
+                    li.innerHTML = `
+                        <div class="session-header-row">
+                            <div class="session-title">SESSÃO #${id}</div>
+                            <button class="btn-delete-sessao" onclick="deletarSessao(event, ${id})" title="Apagar Sessão">🗑️</button>
+                        </div>
+                        <div class="session-char">${personagem}</div>
+                    `;
+                    li.onclick = () => selecionarSessao(id, personagem, contexto, li);
+                    sessionList.appendChild(li);
+                });
+            } catch (error) {
+                console.error("Erro ao carregar sessões:", error);
+                sessionList.innerHTML = '<li class="session-item" style="color:red;">Erro ao conectar com o banco de dados.</li>';
+            }
+        }
+
+        async function carregarMensagensDaSessao() {
+            if (!sessaoAtual) return;
+            chatHistory.innerHTML = '';
+            
+            try {
+                const res = await fetch(`${API_BASE_URL}/historico/${sessaoAtual}`);
+                const historico = await res.json();
+
+                if (historico.length === 0) {
+                    chatHistory.innerHTML = `<div class="message system">Nenhum registro encontrado. Inicie a história.</div>`;
+                } else {
+                    historico.forEach(msg => {
+                        const papel = (msg.papel || msg.Papel) === 'Usuario' ? 'user' : 'ia';
+                        const conteudo = msg.conteudo || msg.Conteudo;
+                        const idMensagem = msg.iD_Mensagem || msg.ID_Mensagem || msg.id_Mensagem;
+                        adicionarMensagemDireta(conteudo, papel, idMensagem);
+                    });
+                }
+                rolarParaOFinal();
+            } catch (error) {
+                console.error("Erro ao carregar histórico:", error);
+            }
+        }
+
+        async function rebobinarPara(idMensagem) {
+            if (!confirm("Tem certeza que deseja rebobinar até aqui? Esta mensagem e todas as seguintes serão apagadas para sempre.")) return;
+            
+            try {
+                const res = await fetch(`${API_BASE_URL}/rebobinar/${sessaoAtual}/${idMensagem}`, { method: 'DELETE' });
+                if (res.ok) {
+                    await carregarMensagensDaSessao();
+                } else {
+                    alert("Erro ao tentar rebobinar a história.");
+                }
+            } catch (error) {
+                console.error("Erro:", error);
+            }
+        }
+
+        async function deletarSessao(event, idSessao) {
+            event.stopPropagation(); // Evita clicar na sessão ao clicar na lixeira
+            if (!confirm("Tem certeza que deseja apagar esta história PARA SEMPRE?")) return;
+
+            try {
+                const res = await fetch(`${API_BASE_URL}/sessao/${idSessao}`, { method: 'DELETE' });
+                if (res.ok) {
+                    if (sessaoAtual === idSessao) {
+                        sessaoAtual = null;
+                        chatHistory.innerHTML = '<div class="message system">Conexão neural desconectada. Escolha ou crie uma nova sessão.</div>';
+                        headerTitle.innerText = "AGUARDANDO CONEXÃO...";
+                        headerDesc.innerText = "Selecione uma sessão no menu lateral para iniciar.";
+                        userInput.disabled = true;
+                        sendBtn.disabled = true;
+                    }
+                    await carregarSessoes();
+                } else {
+                    alert("Erro ao apagar sessão.");
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        // 2. O QUE ACONTECE QUANDO CLICA NUMA SESSÃO (ARCANE OU CYBERPUNK)
+        async function selecionarSessao(id, personagem, contexto, elementoLi) {
+            sessaoAtual = id;
+
+            // Define o tema baseado nas palavras-chave do contexto
+            const textoParaAnalise = (personagem + " " + contexto).toLowerCase();
+            if (textoParaAnalise.includes('arcane') || textoParaAnalise.includes('piltover') || textoParaAnalise.includes('zaun') || textoParaAnalise.includes('hextech')) {
+                document.body.setAttribute('data-theme', 'arcane');
+            } else {
+                document.body.removeAttribute('data-theme'); // Volta pro Cyberpunk padrão
+            }
+
+            // Pinta o botão selecionado
+            document.querySelectorAll('.session-item').forEach(el => el.classList.remove('active'));
+            elementoLi.classList.add('active');
+
+            // Atualiza o Cabeçalho
+            headerTitle.innerText = `CONEXÃO: SESSÃO #${id}`;
+            headerDesc.innerText = `Personagem: ${personagem}`;
+
+            // Limpa o chat e destrava o teclado
+            userInput.disabled = false;
+            sendBtn.disabled = false;
+
+            // Busca as mensagens
+            await carregarMensagensDaSessao();
+            
+            // SE O HISTÓRICO ESTIVER VAZIO, INICIA A HISTÓRIA SOZINHO!
+            if (chatHistory.querySelectorAll('.message').length === 1 && chatHistory.querySelector('.system')) {
+                chatHistory.innerHTML = ''; // Limpa o aviso de sistema
+                userInput.disabled = true;
+                sendBtn.disabled = true;
+                
+                try {
+                    // Chama a rota INICIAR (oculta), que injeta a IA direto sem salvar a mensagem feia na tela
+                    const response = await fetch(`${API_BASE_URL}/iniciar/${sessaoAtual}`, { method: 'POST' });
+                    
+                    if (response.ok) {
+                        const iaMsgBox = criarCaixaVazia('ia');
+                        const textSpan = document.createElement('span');
+                        const cursorSpan = document.createElement('span');
+                        cursorSpan.className = 'cursor';
+                        
+                        iaMsgBox.appendChild(textSpan);
+                        iaMsgBox.appendChild(cursorSpan);
+
+                        const reader = response.body.getReader();
+                        const decoder = new TextDecoder('utf-8');
+                        let textoCompleto = '';
+
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+                            textoCompleto += decoder.decode(value, { stream: true });
+                            textSpan.innerHTML = marked.parse(textoCompleto);
+                            playTypingSound();
+                            rolarParaOFinal();
+                        }
+                        cursorSpan.remove();
+                        await carregarMensagensDaSessao();
+                    }
+                } catch (e) {
+                    console.error("Erro ao iniciar história: ", e);
+                }
+                
+                userInput.disabled = false;
+                sendBtn.disabled = false;
+            }
+            
+            userInput.focus();
+        }
+
+        // Adiciona mensagem sem efeito de digitação (usada para carregar o histórico)
+        function adicionarMensagemDireta(texto, role, idMensagem = null) {
+            const msgDiv = document.createElement('div');
+            msgDiv.classList.add('message', role);
+            
+            if (idMensagem) {
+                const rewindBtn = document.createElement('button');
+                rewindBtn.className = 'rewind-btn';
+                rewindBtn.innerHTML = '⏪ Rebobinar';
+                rewindBtn.title = 'Apagar esta mensagem e voltar a história até aqui';
+                rewindBtn.onclick = () => rebobinarPara(idMensagem);
+                msgDiv.appendChild(rewindBtn);
+            }
+            
+            const roleDiv = document.createElement('div');
+            roleDiv.classList.add('message-role');
+            roleDiv.innerText = role === 'user' ? 'Você' : 'Narrador (IA)';
+            
+            msgDiv.appendChild(roleDiv);
+            
+            const textSpan = document.createElement('span');
+            if (role === 'ia') {
+                textSpan.innerHTML = marked.parse(texto);
+            } else {
+                textSpan.innerText = texto;
+            }
+            msgDiv.appendChild(textSpan);
+            
+            chatHistory.appendChild(msgDiv);
+        }
+
+        // Adiciona mensagem criando a caixa para a IA digitar dentro
+        function criarCaixaVazia(role) {
+            const msgDiv = document.createElement('div');
+            msgDiv.classList.add('message', role);
+            const roleDiv = document.createElement('div');
+            roleDiv.classList.add('message-role');
+            roleDiv.innerText = role === 'user' ? 'Você' : 'Narrador (IA)';
+            msgDiv.appendChild(roleDiv);
+            chatHistory.appendChild(msgDiv);
+            return msgDiv;
+        }
+
+        // 3. ENVIAR NOVA MENSAGEM
+        sendBtn.addEventListener('click', async () => {
+            const text = userInput.value.trim();
+            if (!text || !sessaoAtual) return;
+
+            // Remove a mensagem do "Sistema" se for a primeira mensagem da história
+            const systemMsg = chatHistory.querySelector('.system');
+            if (systemMsg) systemMsg.remove();
+
+            // Mostra o que o usuário digitou
+            adicionarMensagemDireta(text, 'user');
+            userInput.value = '';
+            rolarParaOFinal();
+
+            userInput.disabled = true;
+            sendBtn.disabled = true;
+
+            try {
+                // AGORA ENVIA A MENSAGEM COM O ID DA SESSÃO SELECIONADA
+                const response = await fetch(`${API_BASE_URL}/enviar`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ idSessao: sessaoAtual, texto: text })
+                });
+
+                if (response.ok) {
+                    const iaMsgBox = criarCaixaVazia('ia');
+                    const textSpan = document.createElement('span');
+                    const cursorSpan = document.createElement('span');
+                    cursorSpan.className = 'cursor';
+                    
+                    iaMsgBox.appendChild(textSpan);
+                    iaMsgBox.appendChild(cursorSpan);
+
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder('utf-8');
+                    let textoCompleto = '';
+
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        
+                        textoCompleto += decoder.decode(value, { stream: true });
+                        textSpan.innerHTML = marked.parse(textoCompleto);
+                        playTypingSound(); // <-- Efeito sonoro adicionado aqui
+                        rolarParaOFinal();
+                    }
+                    
+                    cursorSpan.remove();
+                    
+                    // Atualiza a visualização no final para colocar os botões de rebobinar nos novos itens
+                    await carregarMensagensDaSessao();
+                } else {
+                    adicionarMensagemDireta('FALHA NA COMUNICAÇÃO. SINAL RECUSADO.', 'ia');
+                }
+            } catch (error) {
+                adicionarMensagemDireta('ERRO DE CONEXÃO COM O SERVIDOR PRINCIPAL.', 'ia');
+            }
+
+            userInput.disabled = false;
+            sendBtn.disabled = false;
+            userInput.focus();
+            rolarParaOFinal();
+        });
+
+        userInput.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') sendBtn.click();
+        });
+
+        // ====== LÓGICA DO MODAL ======
+        const modalNovaSessao = document.getElementById('modal-nova-sessao');
+        
+        const mundosProntos = {
+            arcane: "O cenário se divide entre a rica e utópica cidade de Piltover e o miserável e oprimido submundo de Zaun. A magia (Hextech) e a ciência estão em constante conflito, assim como as classes sociais. Os Defensores patrulham as ruas de cima, enquanto os barões da química e as gangues governam as vielas tóxicas de baixo. A IA será um narrador sombrio e descritivo, focando na dualidade política, miséria, e no brilho hextech. NPCs devem reagir com preconceito se o personagem for de Zaun, ou com desconfiança se for de Piltover.",
+            cyberpunk: "Night City: Uma megalópole obcecada por poder, glamour e modificações corporais. As megacorporações (Arasaka, Militech) ditam as regras lá de cima de seus arranha-céus, enquanto gangues, netrunners e mercenários lutam pela sobrevivência nas ruas de neon abaixo. A IA será um narrador implacável, focado em alta tecnologia, ciberpsicose, tiroteios cibernéticos e acordos sujos. O mundo não perdoa fraquezas, a linguagem é suja e as traições são comuns.",
+            overwatch: "Terra Pós-Crise Ômnica: Um mundo futurista e vibrante onde a humanidade e os robôs (Ômnicos) tentam coexistir após uma guerra devastadora global. A antiga força-tarefa internacional Overwatch caiu, e agora heróis aposentados, mercenários e organizações terroristas (como a Talon e a Null Sector) disputam o futuro do planeta. A IA deve narrar combates em equipe, uso de habilidades tecnológicas, e focar num clima mais heroico e dinâmico, mas com dilemas éticos sobre inteligência artificial.",
+            valorant: "Terra Ômega e Alpha: Um mundo moderno e tático no ano de 2053, após um evento cataclísmico chamado First Light, que concedeu poderes misteriosos (Radiantes) a certas pessoas. Outros usam tecnologia avançada movida a Radianita. Agentes secretos da Valorant Protocol lutam no submundo para impedir que dimensões paralelas roubem os recursos da Terra. A IA narra operações táticas precisas, espionagem, balística letal combinada com poderes sobrenaturais.",
+            custom: ""
+        };
+
+        // Evento de clique nos mundos
+        document.querySelectorAll('.world-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.world-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                
+                const worldKey = e.target.getAttribute('data-world');
+                const cenarioInput = document.getElementById('input-cenario');
+                cenarioInput.value = mundosProntos[worldKey];
+                
+                // Animação leve pra indicar a mudança
+                cenarioInput.style.backgroundColor = 'rgba(0, 240, 255, 0.1)';
+                setTimeout(() => cenarioInput.style.backgroundColor = 'rgba(0,0,0,0.5)', 300);
+            });
+        });
+
+        // Carrega Cyberpunk como padrão inicial
+        document.getElementById('input-cenario').value = mundosProntos['cyberpunk'];
+
+        document.getElementById('btn-nova-sessao').addEventListener('click', () => {
+            modalNovaSessao.style.display = 'flex';
+        });
+        document.getElementById('btn-cancelar-sessao').addEventListener('click', () => {
+            modalNovaSessao.style.display = 'none';
+        });
+        document.getElementById('btn-salvar-sessao').addEventListener('click', async () => {
+            const personagem = document.getElementById('input-personagem').value.trim();
+            const cenario = document.getElementById('input-cenario').value.trim();
+            if(!personagem || !cenario) return alert("Preencha todos os campos!");
+            
+            document.getElementById('btn-salvar-sessao').innerText = "Processando...";
+            document.getElementById('btn-salvar-sessao').disabled = true;
+
+            try {
+                const res = await fetch(`${API_BASE_URL}/sessao/nova`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ NomePersonagem: personagem, CenarioContexto: cenario })
+                });
+
+                if(res.ok) {
+                    modalNovaSessao.style.display = 'none';
+                    document.getElementById('input-personagem').value = '';
+                    document.getElementById('input-cenario').value = '';
+                    await carregarSessoes();
+                    
+                    // Seleciona a sessão recém-criada (a primeira da lista, já que é ORDER BY DESC)
+                    setTimeout(() => {
+                        const items = document.querySelectorAll('.session-item');
+                        if(items.length > 0) items[0].click();
+                    }, 100);
+                } else {
+                    alert("Erro ao criar sessão.");
+                }
+            } catch (e) {
+                alert("Falha na conexão com a API.");
+            } finally {
+                document.getElementById('btn-salvar-sessao').innerText = "Conectar";
+                document.getElementById('btn-salvar-sessao').disabled = false;
+            }
+        });
+
+        // Libera o áudio ao primeiro clique do usuário na tela (Política de segurança dos navegadores)
+        document.body.addEventListener('click', initAudio, { once: true });
+
+        // Inicia carregando o menu lateral
+        window.onload = carregarSessoes;
+    </script>
+</body>
+</html>
